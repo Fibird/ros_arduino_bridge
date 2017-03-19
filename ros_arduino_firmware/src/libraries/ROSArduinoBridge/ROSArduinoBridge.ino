@@ -1,20 +1,20 @@
 /*********************************************************************
  *  ROSArduinoBridge
- 
+
     A set of simple serial commands to control a differential drive
-    robot and receive back sensor and odometry data. Default 
+    robot and receive back sensor and odometry data. Default
     configuration assumes use of an Arduino Mega + Pololu motor
     controller shield + Robogaia Mega Encoder shield.  Edit the
-    readEncoder() and setMotorSpeed() wrapper functions if using 
+    readEncoder() and setMotorSpeed() wrapper functions if using
     different motor controller or encoder method.
 
     Created for the Pi Robot Project: http://www.pirobot.org
     and the Home Brew Robotics Club (HBRC): http://hbrobotics.org
-    
+
     Authors: Patrick Goebel, James Nugen, Nathaniel Gallinger
 
     Inspired and modeled after the ArbotiX driver by Michael Ferguson
-    
+
     Software License Agreement (BSD License)
 
     Copyright (c) 2012, Patrick Goebel.
@@ -52,7 +52,7 @@
 /* Define the motor controller and encoder library you are using */
 #ifdef USE_BASE
   /* The Pololu VNH5019 dual motor driver shield */
-  #define POLOLU_VNH5019
+  //#define POLOLU_VNH5019
 
   /* The Pololu MC33926 dual motor driver shield */
   //#define POLOLU_MC33926
@@ -62,24 +62,30 @@
 
   /* The Ardunino Motor Shield R3 */
   //#define ARDUINO_MOTOR_SHIELD_R3
-  
+
   /* The brake uses digital pins 8 and 9 and is not compatible with the Robogaia 3-axis
   *  endcoder shield.  Cut the brake jumpers on the R3 motor shield if you want to use
   *  it with the 3-axis encoder shield.
   */
   //#define USE_ARDUINO_MOTOR_SHIELD_R3_BRAKE
-  
+
+  /* L298N Dual H-Bridge Motor Controller */
+  #define L298N_DUAL_HBRIDGE
+
   /* For testing only */
   // #define NO_MOTOR_CONTROLLER
-  
+
   /* The RoboGaia encoder shield */
-  #define ROBOGAIA
-  
+  //#define ROBOGAIA
+
   /* The RoboGaia 3-axis encoder shield */
   //#define ROBOGAIA_3_AXIS
-  
+
   /* Encoders directly attached to Arduino board */
   //#define ARDUINO_ENC_COUNTER
+
+  /* My customized encoders */
+   #define ARDUINO_MY_COUNTER
 #endif
 
 //#define USE_SERVOS  // Enable/disable use of old PWM servo support as defined in servos.h
@@ -130,7 +136,7 @@
 
   /* Convert the rate into an interval */
   const int PID_INTERVAL = 1000 / PID_RATE;
-  
+
   /* Track the next time we make a PID calculation */
   unsigned long nextPID = PID_INTERVAL;
 
@@ -203,12 +209,12 @@ int runCommand() {
     break;
   case ANALOG_WRITE:
     analogWrite(arg1, arg2);
-    Serial.println(F("OK")); 
+    Serial.println(F("OK"));
     break;
   case DIGITAL_WRITE:
     if (arg2 == 0) digitalWrite(arg1, LOW);
     else if (arg2 == 1) digitalWrite(arg1, HIGH);
-    Serial.println(F("OK")); 
+    Serial.println(F("OK"));
     break;
   case PIN_MODE:
     if (arg2 == 0) pinMode(arg1, INPUT);
@@ -292,14 +298,14 @@ int runCommand() {
       nServos++;
     }
     else {
-      myServos[arg1].getServo().attach(arg1);  
+      myServos[arg1].getServo().attach(arg1);
     }
     myServos[arg1].enable();
     Serial.println(F("OK"));
     break;
 
 #endif
-    
+
 #ifdef USE_BASE
   case READ_ENCODERS:
     Serial.print(readEncoder(LEFT));
@@ -322,7 +328,7 @@ int runCommand() {
     else moving = 1;
     leftPID.TargetTicksPerFrame = arg1;
     rightPID.TargetTicksPerFrame = arg2;
-    Serial.println(F("OK")); 
+    Serial.println(F("OK"));
     break;
   case UPDATE_PID:
     i = 0;
@@ -377,7 +383,7 @@ void setup() {
 */
 void loop() {
   while (Serial.available() > 0) {
-    
+
     // Read the next character
     chr = Serial.read();
 
@@ -415,14 +421,14 @@ void loop() {
       }
     }
   }
-  
+
   // If we are using base control, run a PID calculation at the appropriate intervals
   #ifdef USE_BASE
     if (millis() > nextPID) {
       updatePID();
       nextPID += PID_INTERVAL;
     }
-  
+
     // Check to see if we have exceeded the auto-stop interval
     if ((millis() - lastMotorCommand) > AUTO_STOP_INTERVAL) {
       setMotorSpeeds(0, 0);
@@ -436,7 +442,7 @@ void loop() {
     for (i = 0; i < N_SERVOS; i++) {
       servos[i].doSweep();
     }
-    
+
   #elif defined(USE_SERVOS2)
     int i, pin;
     for (i = 0; i < nServos; i++) {
@@ -445,4 +451,3 @@ void loop() {
     }
   #endif
 }
-

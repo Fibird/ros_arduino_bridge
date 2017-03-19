@@ -37,7 +37,6 @@ Features of the stack include:
 * Can control digital outputs (e.g. turn a switch or LED on and off)
 
 * Support for PWM servos
-
 * Configurable base controller if using the required hardware
 
 The stack includes a base controller for a differential drive
@@ -110,7 +109,7 @@ Your Arduino will likely connect to your Linux computer as port /dev/ttyACM# or 
 
     $ ls /dev/ttyACM*
 
-or 
+or
 
     $ ls /dev/ttyUSB*
 
@@ -136,7 +135,7 @@ When you log back in again, try the command:
 
     $ groups
 
-and you should see a list of groups you belong to including dialout. 
+and you should see a list of groups you belong to including dialout.
 
 Installation of the ros\_arduino\_bridge Stack
 ----------------------------------------------
@@ -173,7 +172,7 @@ Loading the ROSArduinoBridge Sketch
   You should be able to find it by going to:
 
     File->Sketchbook->ROSArduinoBridge
-  
+
 **NOTE:** If you have the required hardware to use the base controller, uncomment the line that looks like this:
 
 <pre>
@@ -388,7 +387,7 @@ _Defining Servo Configurations_
 
 The *joints* parameter defines a dictionary of joint names and servo parameters.  (You can name each joint whatever you like but rememember that joint names will become part of the servo's ROS topic and service names.)
 
-The most important parameter is *pin* which of course must match the pin the servo attaches to on your Arduino.  Most PWM servos operate from 0 to 180 degrees with a "neutral" point of 90 degrees. ROS uses radians instead of degrees for joint positions but it is usually easier for programmers to specify the angular limits in the config file using degrees.  The ROS Arduino Bridge pacakge takes care of the conversion to radians.  An *init_position* of 0 therefore means 0 degrees relative to the neutral point of 90 degrees.  A *max_angle* of 90 degrees maps into 180 degrees at the servo. 
+The most important parameter is *pin* which of course must match the pin the servo attaches to on your Arduino.  Most PWM servos operate from 0 to 180 degrees with a "neutral" point of 90 degrees. ROS uses radians instead of degrees for joint positions but it is usually easier for programmers to specify the angular limits in the config file using degrees.  The ROS Arduino Bridge pacakge takes care of the conversion to radians.  An *init_position* of 0 therefore means 0 degrees relative to the neutral point of 90 degrees.  A *max_angle* of 90 degrees maps into 180 degrees at the servo.
 
 _Setting Drivetrain and PID Parameters_
 

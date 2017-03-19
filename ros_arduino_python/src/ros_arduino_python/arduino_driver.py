@@ -3,7 +3,7 @@
 """
     A Python driver for the Arduino microcontroller running the
     ROSArduinoBridge firmware.
-    
+
     Created for the Pi Robot Project: http://www.pirobot.org
     Copyright (c) 2012 Patrick Goebel.  All rights reserved.
 
@@ -11,12 +11,11 @@
     it under the terms of the GNU General Public License as published by
     the Free Software Foundation; either version 2 of the License, or
     (at your option) any later version.
-    
+
     This program is distributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details at:
-    
     http://www.gnu.org/licenses/gpl.html
 
 """
@@ -47,10 +46,9 @@ class CommandException(Exception):
 
 class Arduino:
     def __init__(self, port="/dev/ttyUSB0", baudrate=57600, timeout=0.5, debug=False):
-        
+
         self.PID_RATE = 30 # Do not change this!  It is a fixed property of the Arduino PID controller.
         self.PID_INTERVAL = 1000 / 30
-        
         self.port = port
         self.baudrate = baudrate
         self.timeout = timeout
@@ -64,10 +62,10 @@ class Arduino:
     def connect(self):
         try:
             rospy.loginfo("Looking for the Arduino on port " + str(self.port) +  " ...")
-            
+
             # The port has to be open once with the default baud rate before opening again for real
             self.serial_port = serial.Serial(port=self.port)
-          
+
             # Needed for Leonardo only
             while not self.serial_port.isOpen():
                 time.sleep(self.timeout)
@@ -124,16 +122,16 @@ class Arduino:
 
         return True
 
-    def open(self): 
+    def open(self):
         ''' Open the serial port.
         '''
         self.serial_port.open()
 
-    def close(self): 
+    def close(self):
         ''' Close the serial port.
         '''
-        self.serial_port.close() 
-    
+        self.serial_port.close()
+
     def send(self, cmd):
         ''' This command should not be used on its own: it is called by the execute commands
             below in a thread safe manner.
@@ -186,7 +184,6 @@ class Arduino:
             values = self.execute(cmd).split()
         except CommandException as e:
             values = None
-
         return values
 
     def execute_ack(self, cmd):
@@ -201,7 +198,7 @@ class Arduino:
     def print_debug_msg(self, msg):
         if self.debug:
             rospy.logwarn(msg)
-    
+
     def update_pid(self, Kp, Kd, Ki, Ko):
         ''' Set the PID parameters on the Arduino
         '''
@@ -234,11 +231,11 @@ class Arduino:
     def get_imu_data(self):
         '''
         IMU data is assumed to be returned in the following order:
-    
+
         [ax, ay, az, gx, gy, gz, mx, my, mz, roll, pitch, ch]
-    
+
         where a stands for accelerometer, g for gyroscope and m for magnetometer.
-        The last value ch stands for "compensated heading" that some IMU's can 
+        The last value ch stands for "compensated heading" that some IMU's can
         compute to compensate magnetic heading from the current roll and pitch.
         '''
         values = self.execute_array('i')
@@ -252,7 +249,7 @@ class Arduino:
         ''' Speeds are given in encoder ticks per PID interval
         '''
         return self.execute_ack('m %d %d' %(right, left))
-    
+
     def drive_m_per_s(self, right, left):
         ''' Set the motor speeds in meters per second.
         '''
@@ -263,36 +260,36 @@ class Arduino:
         right_ticks_per_loop  = int(right_revs_per_second * self.encoder_resolution * self.PID_INTERVAL * self.gear_reduction)
 
         self.drive(right_ticks_per_loop , left_ticks_per_loop )
-        
+
     def stop(self):
         ''' Stop both motors.
         '''
         self.drive(0, 0)
-        
+
     def analog_pin_mode(self, pin, mode):
         return self.execute_ack('c A%d %d' %(pin, mode))
-            
+
     def analog_read(self, pin):
         try:
             return int(self.execute('a %d' %pin))
         except:
             return None
-    
+
     def analog_write(self, pin, value):
         return self.execute_ack('x %d %d' %(pin, value))
-    
+
     def digital_read(self, pin):
         try:
             return int(self.execute('d %d' %pin))
         except:
             return None
-    
+
     def digital_write(self, pin, value):
         return self.execute_ack('w %d %d' %(pin, value))
-    
+
     def digital_pin_mode(self, pin, mode):
         return self.execute_ack('c %d %d' %(pin, mode))
-    
+
     def config_servo(self, pin, step_delay):
         ''' Configure a PWM servo '''
         return self.execute_ack('j %d %u' %(pin, step_delay))
@@ -302,13 +299,13 @@ class Arduino:
             Position is given in degrees from 0-180
         '''
         return self.execute_ack('s %d %d' %(id, pos))
-    
+
     def servo_read(self, id):
         ''' Usage: servo_read(id)
             The returned position is in degrees
         '''
         return int(self.execute('t %d' %id))
-    
+
     def set_servo_delay(self, id, delay):
         ''' Usage: set_servo_delay(id, delay)
             Set the delay in ms inbetween servo position updates.  Controls speed of servo movement.
@@ -318,22 +315,22 @@ class Arduino:
     def detach_servo(self, id):
         ''' Usage: detach_servo(id)
             Detach a servo from control by the Arduino
-        '''        
+        '''
         return self.execute_ack('z %d' %id)
-    
+
     def attach_servo(self, id):
         ''' Usage: attach_servo(id)
             Attach a servo to the Arduino
-        '''        
+        '''
         return self.execute_ack('y %d' %id)
-    
+
     def ping(self, pin):
         ''' The srf05/Ping command queries an SRF05/Ping sonar sensor
             connected to the General Purpose I/O line pinId for a distance,q
             and returns the range in cm.  Sonar distance resolution is integer based.
         '''
         return int(self.execute('p %d' %pin));
-    
+
 #    def get_maxez1(self, triggerPin, outputPin):
 #        ''' The maxez1 command queries a Maxbotix MaxSonar-EZ1 sonar
 #            sensor connected to the General Purpose I/O lines, triggerPin, and
@@ -344,8 +341,7 @@ class Arduino:
 #            (inches). The sensor distance resolution is integer based. Also, the
 #            maxsonar trigger pin is RX, and the echo pin is PW.
 #        '''
-#        return self.execute('z %d %d' %(triggerPin, outputPin)) 
- 
+#        return self.execute('z %d %d' %(triggerPin, outputPin))
 
 """ Basic test for connectivity """
 if __name__ == "__main__":
@@ -353,15 +349,14 @@ if __name__ == "__main__":
         portName = "/dev/ttyACM0"
     else:
         portName = "COM43" # Windows style COM port.
-        
     baudRate = 57600
 
     myArduino = Arduino(port=portName, baudrate=baudRate, timeout=0.5)
     myArduino.connect()
-     
+
     print "Sleeping for 1 second..."
-    time.sleep(1)   
-    
+    time.sleep(1)
+
     print "Reading on analog port 0", myArduino.analog_read(0)
     print "Reading on digital port 0", myArduino.digital_read(0)
     print "Blinking the LED 3 times"
@@ -369,11 +364,10 @@ if __name__ == "__main__":
         myArduino.digital_write(13, 1)
         time.sleep(1.0)
     #print "Current encoder counts", myArduino.encoders()
-    
+
     print "Connection test successful.",
-    
+
     myArduino.stop()
     myArduino.close()
-    
+
     print "Shutting down Arduino."
-    

@@ -2,6 +2,12 @@
 # Created by https://www.gitignore.io/api/python
 
 ### Python ###
+<<<<<<< HEAD
+=======
+# temp file
+*~
+
+>>>>>>> indigo-devel-lcy
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -24,7 +30,10 @@ lib64/
 parts/
 sdist/
 var/
+<<<<<<< HEAD
 wheels/
+=======
+>>>>>>> indigo-devel-lcy
 *.egg-info/
 .installed.cfg
 *.egg
@@ -71,7 +80,11 @@ docs/_build/
 # PyBuilder
 target/
 
+<<<<<<< HEAD
 # Jupyter Notebook
+=======
+# IPython Notebook
+>>>>>>> indigo-devel-lcy
 .ipynb_checkpoints
 
 # pyenv
@@ -80,14 +93,21 @@ target/
 # celery beat schedule file
 celerybeat-schedule
 
+<<<<<<< HEAD
 # SageMath parsed files
 *.sage.py
 
+=======
+>>>>>>> indigo-devel-lcy
 # dotenv
 .env
 
 # virtualenv
+<<<<<<< HEAD
 .venv
+=======
+.venv/
+>>>>>>> indigo-devel-lcy
 venv/
 ENV/
 
@@ -96,7 +116,10 @@ ENV/
 
 # Rope project settings
 .ropeproject
+<<<<<<< HEAD
 
 # Cached files
 *~
 # End of https://www.gitignore.io/api/python
+=======
+>>>>>>> indigo-devel-lcy
