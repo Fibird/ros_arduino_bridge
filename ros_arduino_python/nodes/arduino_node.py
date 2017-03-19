@@ -23,39 +23,53 @@ import rospy
 from ros_arduino_python.arduino_driver import Arduino
 from ros_arduino_python.arduino_sensors import *
 from ros_arduino_msgs.srv import *
+from ros_arduino_python.diagnostics import DiagnosticsUpdater, DiagnosticsPublisher
+from ros_arduino_python.cfg import ROSArduinoBridgeConfig
 from ros_arduino_python.base_controller import BaseController
 from ros_arduino_python.servo_controller import Servo, ServoController
-#from ros_arduino_python.follow_controller import FollowController
+from ros_arduino_python.follow_controller import FollowController
 from ros_arduino_python.joint_state_publisher import JointStatePublisher
+import dynamic_reconfigure.server
+import dynamic_reconfigure.client
 from geometry_msgs.msg import Twist
 from std_srvs.srv import Empty, EmptyResponse
-import os, time
-import thread
+import os, time, thread
 from math import radians
+from serial.serialutil import SerialException
 
-#controller_types = { "follow_controller" : FollowController }
+controller_types = { "follow_controller" : FollowController }
 
 class ArduinoROS():
     def __init__(self):
-        rospy.init_node('Arduino', log_level=rospy.INFO)
-                
+        rospy.init_node('arduino', log_level=rospy.INFO)
+
+        # Find the actual node name in case it is set in the launch file
+        self.name = rospy.get_name()
+
         # Cleanup when termniating the node
         rospy.on_shutdown(self.shutdown)
-        
+
         self.port = rospy.get_param("~port", "/dev/ttyACM0")
         self.baud = int(rospy.get_param("~baud", 57600))
         self.timeout = rospy.get_param("~timeout", 0.5)
         self.base_frame = rospy.get_param("~base_frame", 'base_link')
 
         # Overall loop rate: should be faster than fastest sensor rate
-        self.rate = int(rospy.get_param("~rate", 50))
+        self.rate = int(rospy.get_param("~rate", 30))
         r = rospy.Rate(self.rate)
 
         # Rate at which summary SensorState message is published. Individual sensors publish
         # at their own rates.        
         self.sensorstate_rate = int(rospy.get_param("~sensorstate_rate", 10))
         
+        # Are we using the base_controller?
         self.use_base_controller = rospy.get_param("~use_base_controller", False)
+        
+        # Default error threshold (percent) before getting a diagnostics warning
+        self.diagnotics_error_threshold = rospy.get_param("~diagnotics_error_threshold", 10)
+        
+        # Diagnostics update rate
+        self.diagnotics_rate = rospy.get_param("~diagnotics_rate", 1.0)
         
         # Assume we don't have any joints by default
         self.have_joints = False
@@ -108,60 +122,101 @@ class ArduinoROS():
         # A service to read the value of an analog sensor
         rospy.Service('~analog_read', AnalogRead, self.AnalogReadHandler)
 
-        # A service to reset the odometry values to 0
-        rospy.Service('~reset_odometry', Empty, self.ResetOdometryHandler)
-
         # Initialize the device
-        self.device = Arduino(self.port, self.baud, self.timeout)
-        
+        self.device = Arduino(self.port, self.baud, self.timeout, debug=True)
+
         # Make the connection
-        self.device.connect()
-        
-        rospy.loginfo("Connected to Arduino on port " + self.port + " at " + str(self.baud) + " baud")
+        if self.device.connect():
+            rospy.loginfo("Connected to Arduino on port " + self.port + " at " + str(self.baud) + " baud")
+        else:
+            rospy.logerr("No serial connection found.")
+            os._exit(0)
+
+        # Initialize the base controller if used
+        if self.use_base_controller:
+            self.base_controller = BaseController(self.device, self.base_frame, self.name + "_base_controller")
+            
+            # A service to reset the odometry values to 0
+            rospy.Service('~reset_odometry', Empty, self.ResetOdometryHandler)
+    
+            # A service to update the PID parameters Kp, Kd, Ki, and Ko
+            rospy.Service('~update_pid', UpdatePID, self.UpdatePIDHandler)
+            
+            # Fire up the dynamic_reconfigure server
+            dyn_server = dynamic_reconfigure.server.Server(ROSArduinoBridgeConfig, self.dynamic_reconfigure_server_callback, namespace=self.name)
+
+            # Connect to the dynamic_reconfigure client
+            dyn_client = dynamic_reconfigure.client.Client (self.name, timeout=5)
      
         # Reserve a thread lock
         mutex = thread.allocate_lock()
 
         # Initialize any sensors
-        self.mySensors = list()
-        
+        self.device.sensors = list()
+
+        # Keep a list of IMUs or gyros used for odometry so they can be reset
+        self.imu_for_odom = list()
+
         # Read in the sensors parameter dictionary
         sensor_params = rospy.get_param("~sensors", dict({}))
-        
+
         # Initialize individual sensors appropriately
         for name, params in sensor_params.iteritems():
             if params['type'].lower() == 'Ping'.lower():
                 sensor = Ping(self.device, name, **params)
-            elif params['type'].lower() == 'GP2D12'.lower():
+            elif params['type'].lower() == 'GP2D12'.lower() or params['type'].lower() == 'GP2Y0A21YK0F'.lower():
                 sensor = GP2D12(self.device, name, **params)
             elif params['type'].lower() == 'Digital'.lower():
                 sensor = DigitalSensor(self.device, name, **params)
             elif params['type'].lower() == 'Analog'.lower():
                 sensor = AnalogSensor(self.device, name, **params)
+            elif params['type'].lower() == 'AnalogFloat'.lower():
+                sensor = AnalogFloatSensor(self.device, name, **params)
             elif params['type'].lower() == 'PololuMotorCurrent'.lower():
                 sensor = PololuMotorCurrent(self.device, name, **params)
             elif params['type'].lower() == 'PhidgetsVoltage'.lower():
                 sensor = PhidgetsVoltage(self.device, name, **params)
             elif params['type'].lower() == 'PhidgetsCurrent'.lower():
                 sensor = PhidgetsCurrent(self.device, name, **params)
+            elif params['type'].lower() == 'IMU'.lower():
+                sensor = IMU(self.device, name, **params)
+                try:
+                    if params['use_for_odom']:
+                        self.imu_for_odom.append(sensor)
+                except:
+                    pass
+            elif params['type'].lower() == 'Gyro'.lower():
+                try:
+                    sensor = Gyro(self.device, name, base_controller=self.base_controller, **params)
+                except:
+                    sensor = Gyro(self.device, name, **params)
+
+                try:
+                    if params['use_for_odom']:
+                        self.imu_for_odom.append(sensor)
+                except:
+                    pass
                 
 #                if params['type'].lower() == 'MaxEZ1'.lower():
 #                    self.sensors[len(self.sensors)]['trigger_pin'] = params['trigger_pin']
 #                    self.sensors[len(self.sensors)]['output_pin'] = params['output_pin']
 
-            self.mySensors.append(sensor)
+            try:
+                self.device.sensors.append(sensor)
             
-            if params['rate'] != None and params['rate'] != 0:
-                rospy.loginfo(name + " " + str(params) + " published on topic " + rospy.get_name() + "/sensor/" + name)
-            else:
-                if sensor.direction == "input":
-                    rospy.loginfo(name + " service ready at " + rospy.get_name() + "/" + name + "/read")
+                if params['rate'] != None and params['rate'] != 0:
+                    rospy.loginfo(name + " " + str(params) + " published on topic " + rospy.get_name() + "/sensor/" + name)
                 else:
-                    rospy.loginfo(name + " service ready at " + rospy.get_name() + "/" + name + "/write")
+                    if sensor.direction == "input":
+                        rospy.loginfo(name + " service ready at " + rospy.get_name() + "/" + name + "/read")
+                    else:
+                        rospy.loginfo(name + " service ready at " + rospy.get_name() + "/" + name + "/write")
+            except:
+                rospy.logerr("Sensor type " + str(params['type'] + " not recognized."))
 
-            
-        # Initialize any joints (servos)
-        self.device.joints = dict()
+        # If at least one IMU or gyro is used for odometry, set the use_imu_heading flag on the base controller
+        if self.use_base_controller and len(self.imu_for_odom) > 0:
+            self.base_controller.use_imu_heading = True
         
         # Read in the joints (if any)    
         joint_params = rospy.get_param("~joints", dict())
@@ -169,13 +224,17 @@ class ArduinoROS():
         if len(joint_params) != 0:
             self.have_joints = True
             
+            self.device.joints = dict()
+            
+            self.device.joint_update_rate = float(rospy.get_param("~joint_update_rate", 10))
+            
             # Configure each servo
             for name, params in joint_params.iteritems():
                 try:
                     if params['continuous'] == True:
                         self.device.joints[name] = ContinuousServo(self.device, name)
                     else:
-                        self.device.joints[name] = Servo(self.device, name)        
+                        self.device.joints[name] = Servo(self.device, name)
                 except:
                     self.device.joints[name] = Servo(self.device, name)
 
@@ -188,64 +247,87 @@ class ArduinoROS():
             # The joint state publisher publishes the latest joint values on the /joint_states topic
             self.joint_state_publisher = JointStatePublisher()
             
-#             # Initialize any trajectory action follow controllers
-#             controllers = rospy.get_param("~controllers", dict())
-#              
-#             self.device.controllers = list()
-#              
-#             for name, params in controllers.items():
-#                 try:
-#                     controller = controller_types[params["type"]](self.device, name)
-#                     self.device.controllers.append(controller)
-#                 except Exception as e:
-#                     if type(e) == KeyError:
-#                         rospy.logerr("Unrecognized controller: " + params["type"])
-#                     else:  
-#                         rospy.logerr(str(type(e)) + str(e))
-#      
-#             for controller in self.device.controllers:
-#                 controller.startup()
-
-        # Initialize the base controller if used
-        if self.use_base_controller:
-            self.myBaseController = BaseController(self.device, self.base_frame)
+        # Create the diagnostics updater for the Arduino device
+        self.device.diagnostics = DiagnosticsUpdater(self, self.name, self.diagnotics_error_threshold, self.diagnotics_rate, create_watchdog=True)
+        
+        # Create the overall diagnostics publisher
+        self.diagnostics_publisher = DiagnosticsPublisher(self)
+            
+        # Initialize any trajectory action follow controllers
+        controllers = rospy.get_param("~controllers", dict())
+          
+        self.device.controllers = list()
+          
+        for name, params in controllers.items():
+            try:
+                controller = controller_types[params["type"]](self.device, name)
+                self.device.controllers.append(controller)
+            except Exception as e:
+                if type(e) == KeyError:
+                    rospy.logerr("Unrecognized controller: " + params["type"])
+                else:  
+                    rospy.logerr(str(type(e)) + str(e))
+  
+        for controller in self.device.controllers:
+            controller.startup()
             
         print "\n==> ROS Arduino Bridge ready for action!"
     
         # Start polling the sensors, base controller, and servo controller
         while not rospy.is_shutdown():
-            # Heartbeat test for the serial connection
+            # Heartbeat/watchdog test for the serial connection
             try:
+                # Update read counters
+                self.device.diagnostics.reads += 1
+                self.device.diagnostics.total_reads += 1
                 self.device.serial_port.inWaiting()
+                # Add this heartbeat to the frequency status diagnostic task
+                self.device.diagnostics.freq_diag.tick()
+                # Let the diagnostics updater know we're still alive
+                self.device.diagnostics.watchdog = True
             except IOError:
-                rospy.loginfo("Lost serial connection...")
+                # Update error counter
+                self.device.diagnostics.errors += 1
+                rospy.loginfo("Lost serial connection. Waiting to reconnect...")
+                # Let the diagnostics updater know that we're down
+                self.device.diagnostics.watchdog = False
                 self.device.close()
-                while True:
-                    try:
-                        self.device.open()
-                        rospy.loginfo("Serial connection re-established.")
-                        break
-                    except:
-                        r.sleep()
-                        continue
-
-            for sensor in self.mySensors:
-                if sensor.rate != 0:
-                    mutex.acquire()
-                    sensor.poll()
-                    mutex.release()                  
-                    
-            if self.use_base_controller:
-                mutex.acquire()
-                self.myBaseController.poll()
-                mutex.release()
-                
-            if self.have_joints:
-                mutex.acquire()
-                self.servo_controller.poll()
-                self.joint_state_publisher.poll(self.device.joints.values())
-                mutex.release()
+                with mutex:
+                    while True:
+                        try:
+                            self.device.open()
+                            while True:
+                                self.device.serial_port.write('\r')
+                                test = self.device.serial_port.readline().strip('\n').strip('\r')
+                                rospy.loginfo("Waking up serial port...")
+                                if test == 'Invalid Command':
+                                    self.device.serial_port.flushInput()
+                                    self.device.serial_port.flushOutput()
+                                    break
+                            rospy.loginfo("Serial connection re-established.")
+                            break
+                        except:
+                            r.sleep()
+                            self.diagnostics_publisher.update()
+                            continue
             
+            # Poll any sensors
+            for sensor in self.device.sensors:
+                if sensor.rate != 0:
+                    with mutex:
+                        sensor.poll()
+                                     
+            # Poll the base controller
+            if self.use_base_controller:
+                with mutex:
+                    self.base_controller.poll()
+                
+            # Poll any joints
+            if self.have_joints:
+                with mutex:
+                    self.servo_controller.poll()
+                    self.joint_state_publisher.poll(self.device.joints.values())
+                                
             # Publish all sensor values on a single topic for convenience
             now = rospy.Time.now()
             
@@ -253,15 +335,19 @@ class ArduinoROS():
                 msg = SensorState()
                 msg.header.frame_id = self.base_frame
                 msg.header.stamp = now
-                for i in range(len(self.mySensors)):
-                    msg.name.append(self.mySensors[i].name)
-                    msg.value.append(self.mySensors[i].value)
+                for i in range(len(self.device.sensors)):
+                    if self.device.sensors[i].message_type != MessageType.IMU:
+                        msg.name.append(self.device.sensors[i].name)
+                        msg.value.append(self.device.sensors[i].value)
                 try:
                     self.sensorStatePub.publish(msg)
                 except:
                     pass
                 
                 self.t_next_sensors = now + self.t_delta_sensors
+                
+            # Update diagnostics and publish
+            self.diagnostics_publisher.update()
             
             r.sleep()
     
@@ -326,14 +412,57 @@ class ArduinoROS():
 
     def ResetOdometryHandler(self, req):
         if self.use_base_controller:
-            self.myBaseController.reset_odometry()
+            self.base_controller.reset_odometry()
+            for imu in self.imu_for_odom:
+                imu.reset()
         else:
             rospy.logwarn("Not using base controller!")
         return EmptyResponse()
+
+    def UpdatePIDHandler(self, req):
+        if self.use_base_controller:
+           self.device.update_pid(req.Kp, req.Kd, req.Ki, req.Ko)
+           rospy.loginfo("Updating PID parameters: Kp=%0.3f, Kd=%0.3f, Ki=%0.3f, Ko=%0.3f" %(req.Kp, req.Kd, req.Ki, req.Ko))
+        else:
+            rospy.logwarn("Not using base controller!")
+        return UpdatePIDResponse()
+
+    def dynamic_reconfigure_server_callback(self, config, level):
+        if self.use_base_controller:
+            try:
+                if self.base_controller.Kp != config['Kp']:
+                    self.base_controller.Kp = config['Kp']
+
+                if self.base_controller.Kd != config['Kd']:
+                    self.base_controller.Kd = config['Kd']
+
+                if self.base_controller.Ki != config['Ki']:
+                    self.base_controller.Ki = config['Ki']
+
+                if self.base_controller.Ko != config['Ko']:
+                    self.base_controller.Ko = config['Ko']
+
+                if self.base_controller.accel_limit != config['accel_limit']:
+                    self.base_controller.accel_limit = config['accel_limit']
+                    self.base_controller.max_accel = self.base_controller.accel_limit * self.base_controller.ticks_per_meter / self.base_controller.rate
+
+                if self.base_controller.odom_linear_scale_correction != config['odom_linear_scale_correction']:
+                    self.base_controller.odom_linear_scale_correction = config['odom_linear_scale_correction']
+                    
+                if self.base_controller.odom_angular_scale_correction != config['odom_angular_scale_correction']:
+                    self.base_controller.odom_angular_scale_correction = config['odom_angular_scale_correction']
+
+                self.device.update_pid(self.base_controller.Kp, self.base_controller.Kd, self.base_controller.Ki, self.base_controller.Ko)
+
+                rospy.loginfo("Updating PID parameters: Kp=%0.2f, Kd=%0.2f, Ki=%0.2f, Ko=%0.2f, accel_limit=%0.2f" %(self.base_controller.Kp, self.base_controller.Kd, self.base_controller.Ki, self.base_controller.Ko, self.base_controller.accel_limit))
+            except Exception as e:
+                print e
+
+        return config
         
     def shutdown(self):
         rospy.loginfo("Shutting down Arduino node...")
-
+        
         # Stop the robot
         if self.use_base_controller:
             rospy.loginfo("Stopping the robot...")
@@ -346,6 +475,20 @@ class ArduinoROS():
             for joint in self.device.joints.values():
                 self.device.detach_servo(joint.pin)
                 rospy.sleep(0.2)
+                
+        # Close the serial port
+        self.device.close()
         
 if __name__ == '__main__':
-    myArduino = ArduinoROS()
+    try:
+        myArduino = ArduinoROS()
+    except KeyboardInterrupt:
+        try:
+            myArduino.device.serial_port.close()
+        except:
+            rospy.logerr("Serial exception trying to close port.")
+            os._exit(0)
+    except SerialException:
+        rospy.logerr("Serial exception trying to open port.")
+        os._exit(0)
+        

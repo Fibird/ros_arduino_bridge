@@ -1,3 +1,7 @@
+**UNSTABLE BRANCH**
+
+This branch is under active development and is not likely to work.  Please use the official hydro-devel or indigo-devel branch for ROS Hydro or ROS Indigo, respectively.
+
 Table of Contents
 =================
 
@@ -60,6 +64,10 @@ http://www.ros.org/wiki/ros_arduino_bridge
 
 System Requirements
 -------------------
+**ROS Dependencies**
+
+    $ sudo apt-get install ros-indigo-diagnostic-updater ros-indigo-control-msgs ros-indigo-nav-msgs
+
 **Python Serial:** To install the python-serial package under Ubuntu, use the command:
 
     $ sudo apt-get install python-serial

@@ -45,20 +45,20 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  *********************************************************************/
 
-#define USE_BASE      // Enable/disable the base controller code
+//#define USE_BASE      // Enable/disable the base controller code
 
-#define USE_IMU       // Enable/disable use of an IMU
+//#define USE_IMU       // Enable/disable use of an IMU
 
 /* Define the motor controller and encoder library you are using */
 #ifdef USE_BASE
   /* The Pololu VNH5019 dual motor driver shield */
-  //#define POLOLU_VNH5019
+  #define POLOLU_VNH5019
 
   /* The Pololu MC33926 dual motor driver shield */
   //#define POLOLU_MC33926
 
   /* The Adafruit motor shield V2 */
-  #define ADAFRUIT_MOTOR_SHIELD_V2
+  //#define ADAFRUIT_MOTOR_SHIELD_V2
 
   /* The Ardunino Motor Shield R3 */
   //#define ARDUINO_MOTOR_SHIELD_R3
@@ -73,10 +73,10 @@
   // #define NO_MOTOR_CONTROLLER
   
   /* The RoboGaia encoder shield */
-  //#define ROBOGAIA
+  #define ROBOGAIA
   
   /* The RoboGaia 3-axis encoder shield */
-  #define ROBOGAIA_3_AXIS
+  //#define ROBOGAIA_3_AXIS
   
   /* Encoders directly attached to Arduino board */
   //#define ARDUINO_ENC_COUNTER
@@ -143,6 +143,7 @@
 #ifdef USE_IMU
   #include "imu.h"
 
+  // The only IMU currently supported is the Adafruit 9-DOF IMU
   #define ADAFRUIT_9DOF
 
 #endif
@@ -161,8 +162,8 @@ char chr;
 char cmd;
 
 // Character arrays to hold the first and second arguments
-char argv1[16];
-char argv2[16];
+char argv1[32];
+char argv2[32];
 
 // The arguments converted to integers
 long arg1;
@@ -220,6 +221,9 @@ int runCommand() {
 #ifdef USE_IMU
   case READ_IMU:
     imu_data = readIMU();
+    /* Send the IMU data base in the following order
+     * [ax, ay, az, gx, gy, gz, mx, my, mz, roll, pitch, ch]
+     */
     Serial.print(imu_data.ax);
     Serial.print(F(" "));
     Serial.print(imu_data.ay);
@@ -242,7 +246,7 @@ int runCommand() {
     Serial.print(F(" "));
     Serial.print(imu_data.pitch);
     Serial.print(F(" "));
-    Serial.println(imu_data.uh);
+    Serial.println(imu_data.ch);
     break;
 #endif
 #ifdef USE_SERVOS
@@ -312,6 +316,7 @@ int runCommand() {
     lastMotorCommand = millis();
     if (arg1 == 0 && arg2 == 0) {
       setMotorSpeeds(0, 0);
+      resetPID();
       moving = 0;
     }
     else moving = 1;
@@ -322,8 +327,8 @@ int runCommand() {
   case UPDATE_PID:
     i = 0;
     while ((str = strtok_r(p, ":", &p)) != '\0') {
-       pid_args[i] = atoi(str);
-       i++;
+      pid_args[i] = atoi(str);
+      i++;
     }
     Kp = pid_args[0];
     Kd = pid_args[1];
