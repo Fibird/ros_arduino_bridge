@@ -5,11 +5,11 @@
 
 /*
   IMU data is assumed to be returned in the following order:
-    
+
   [ax, ay, az, gx, gy, gz, mx, my, mz, roll, pitch, ch]
-    
+
   where a stands for accelerometer, g for gyroscope and m for magnetometer.
-  The last value ch stands for "compensated heading" that some IMU's can 
+  The last value ch stands for "compensated heading" that some IMU's can
   compute to compensate magnetic heading for the current roll and pitch.
 */
 

@@ -149,8 +149,9 @@
 #ifdef USE_IMU
   #include "imu.h"
 
-  // The only IMU currently supported is the Adafruit 9-DOF IMU
-  #define ADAFRUIT_9DOF
+  // There are two IMUs currently supported: the Adafruit 9-DOF IMU and GY85 IMU
+  //#define ADAFRUIT_9DOF
+  #define GY85_IMU
 
 #endif
 
