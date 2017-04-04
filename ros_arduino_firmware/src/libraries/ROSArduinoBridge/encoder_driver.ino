@@ -320,3 +320,4 @@
 #else
   #error A encoder driver must be selected!
 #endif
+#endif

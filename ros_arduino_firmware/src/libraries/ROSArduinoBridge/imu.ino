@@ -168,7 +168,7 @@
       data.az = az;   data.gz = gz;   data.mz = scaled.ZAxis;
       data.roll = accurateRoll;
       data.pitch = accuratePitch;
-      data.uh = accurateYaw;
+      data.ch = accurateYaw;
 
       return data;
     }
