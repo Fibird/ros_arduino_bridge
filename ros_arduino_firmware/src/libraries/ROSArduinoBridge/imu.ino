@@ -1,7 +1,6 @@
 #ifdef USE_IMU
 
   #ifdef ADAFRUIT_9DOF
-
     #include <Wire.h>
     #include <Adafruit_Sensor.h>
     #include <Adafruit_LSM303_U.h>
@@ -26,7 +25,7 @@
     }
 
     imuData readIMU() {
-      imuData_s data;
+      imuData data;
 
       sensors_event_t accel_event;
       sensors_event_t mag_event;
@@ -71,9 +70,7 @@
       return data;
     }
 
-  #endif
-
-  #ifdef GY85_IMU
+  #elif defined(GY85_IMU)
     /*
       The code following is from our repository: <https://github.com/Saturn-robot/GY85_driver>
     */
@@ -111,7 +108,7 @@
 
     imuData readIMU()
     {
-      imuData_s data;
+      imuData data;
       int raw_ax, raw_ay, raw_az;
       float raw_gx, raw_gy, raw_gz;
       float accel_roll = 0.0, accel_pitch = 0.0;
@@ -173,6 +170,7 @@
       return data;
     }
 
-  #endif
-
+  #else
+  #error A imu driver must be selected!
+#endif
 #endif

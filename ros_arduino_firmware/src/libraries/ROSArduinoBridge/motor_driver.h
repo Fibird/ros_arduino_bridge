@@ -1,11 +1,11 @@
 /***********************************************************************
    Motor driver function definitions - by James Nugen and Chaoyang Liu
    ***********************************************************************/
-
+#ifdef USE_BASE
 void initMotorController();
 void setMotorSpeed(int i, int spd);
 void setMotorSpeeds(int leftSpeed, int rightSpeed);
-
+#endif
 
 /**********
  * Pin assignments for the Arduino Motor Shield R3

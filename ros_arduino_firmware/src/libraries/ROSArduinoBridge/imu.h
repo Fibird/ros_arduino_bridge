@@ -13,7 +13,7 @@
   compute to compensate magnetic heading for the current roll and pitch.
 */
 
-typedef struct imuData_s
+typedef struct
     {
       float ax = -999;
       float ay = -999;
@@ -29,8 +29,11 @@ typedef struct imuData_s
       float ch = -999;
     } imuData;
 
-    void initIMU();
-    imuData readIMU();
+    //void initIMU();
+    //imuData readIMU();
+    #ifdef GY85_IMU
+    float complementaryFilter(float gyro_angle, float accelorMag_angle);
+    #endif
     imuData imu_data;
 
 #endif

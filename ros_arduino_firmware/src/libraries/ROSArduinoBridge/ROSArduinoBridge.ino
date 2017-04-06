@@ -45,7 +45,7 @@
  *  POSSIBILITY OF SUCH DAMAGE.
  *********************************************************************/
 
-#define USE_BASE      // Enable/disable the base controller code
+//#define USE_BASE      // Enable/disable the base controller code
 
 #define USE_IMU       // Enable/disable use of an IMU
 
@@ -148,9 +148,10 @@
 
 #ifdef USE_IMU
   #include "imu.h"
-
   // There are two IMUs currently supported: the Adafruit 9-DOF IMU and GY85 IMU
   //#define ADAFRUIT_9DOF
+  void initIMU();
+  imuData readIMU();
   #define GY85_IMU
 
 #endif
